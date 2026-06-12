@@ -1,0 +1,13 @@
+local id = game.PlaceId
+
+-- grow a garden
+if id == 97598239454123 then
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/twobat602/growgarden/refs/heads/main/gag'))()
+
+-- the sewer
+elseif id == 15798268709 then
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/twobat602/the-sewer/refs/heads/main/sewer'))()
+
+else
+    warn("Game not supported: " .. tostring(id))
+end
