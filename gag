@@ -1,0 +1,478 @@
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "Grow a Garden 2",
+    ToggleKey = Enum.KeyCode.C,
+    Icon = "cat",
+    Author = "Twobat",
+    Folder = "MyTestHub",
+
+Size = UDim2.fromOffset(400, 300),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+    SideBarWidth = 200,
+    BackgroundImageTransparency = 0.42,
+    ScrollBarEnabled = true
+})
+
+
+Window:Tag({
+    Title = "V1",
+    Color = Color3.fromHex("#fa0a42")
+})
+
+--TAB
+local Farm = Window:Tab({
+    Title = "Farm",
+    Icon = "tractor",
+    Locked = false,
+    IconColor = Color3.fromRGB(99, 245, 66),
+    IconShape = "Square",
+    Border = true
+})
+
+local Shop = Window:Tab({
+    Title = "Shop",
+    Icon = "store",
+    Locked = false,
+    IconColor = Color3.fromRGB(247, 133, 32),
+    IconShape = "Square",
+    Border = true
+})
+
+local Sell = Window:Tab({
+    Title = "Sell",
+    Icon = "circle-dollar-sign",
+    Locked = false,
+    IconColor = Color3.fromRGB(9, 176, 12),
+    IconShape = "Square",
+    Border = true
+})
+
+local Report = Window:Tab({
+    Title = "Found Bugs?",
+    Icon = "bug",
+    Locked = false,
+    IconColor = Color3.fromRGB(255, 100, 100),
+    IconShape = "Square",
+    Border = true
+})
+
+--script
+local CenteredSection = Farm:Section({
+    Title = "Auto Harvest",
+    TextXAlignment = "Center",
+    TextSize = 17
+})
+ 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- PATHS
+local gardensFolder = workspace:WaitForChild("Gardens")
+local remoteEvent = game:GetService("ReplicatedStorage")
+    :WaitForChild("SharedModules")
+    :WaitForChild("Packet")
+    :WaitForChild("RemoteEvent")
+
+-- CONFIGURATIONS
+local allPlantsList = { 
+    "Carrot", "Strawberry", "Blueberry", "Tulip", "Tomato", "Apple", 
+    "Bamboo", "Corn", "Cactus", "Pineapple", "Mushroom", "Green Bean", 
+    "Banana", "Grape", "Coconut", "Mango", "Dragon Fruit", "Acorn", 
+    "cherry Sunflower", "Venus Fly Trap", "Pomegranate", "Poison Apple", 
+    "Moon Bloom", "Dragon's Breath" 
+}
+
+local singleHarvestPlants = {
+    ["Carrot"] = true,
+    ["Tulip"] = true,
+    ["Bamboo"] = true,
+    ["Mushroom"] = true
+}
+
+-- GLOBAL STATES
+local selectedHarvestPlants = {}
+local autoHarvestEnabled = false
+
+-- BUFFER PACKET BUILDER FOR HARVEST
+local function harvestPlantPacket(plantName, plantID, fruitID)
+    local rawString
+    if singleHarvestPlants[plantName] then
+        -- Format para sa single harvest (gaya ng Carrot/Tulip: \176\000$id\000)
+        rawString = "\176\000$" .. plantID .. "\000"
+    else
+        -- Format para sa multi harvest (gaya ng Strawberry: \176\000$id$id)
+        rawString = "\176\000$" .. plantID .. "$" .. fruitID
+    end
+    local myBuffer = buffer.fromstring(rawString)
+    remoteEvent:FireServer(myBuffer)
+end
+
+Farm:Dropdown({
+    Title = "Select Plants to Harvest",
+    Desc = "Choose which plants to auto harvest",
+    Values = allPlantsList,
+    Multi = true,
+    Default = {},
+    AllowNone = true,
+    Callback = function(selected)
+        selectedHarvestPlants = selected or {}
+    end
+})
+
+Farm:Toggle({
+    Title = "Auto Harvest",
+    Callback = function(state)
+        autoHarvestEnabled = state
+        if autoHarvestEnabled and gardensFolder then
+            task.spawn(function()
+                while autoHarvestEnabled do
+                    for _, plot in pairs(gardensFolder:GetChildren()) do
+                        if not autoHarvestEnabled then break end
+                        
+                        local plantsFolder = plot:FindFirstChild("Plants")
+                        if plantsFolder then
+                            for _, plantModel in pairs(plantsFolder:GetChildren()) do
+                                if not autoHarvestEnabled then break end
+                                
+                                local fruitsFolder = plantModel:FindFirstChild("Fruits")
+                                
+                                -- 1. MULTI-HARVEST LOGIC (May Fruits folder at gumagamit ng CorePartName)
+                                if fruitsFolder then
+                                    for _, fruitModel in pairs(fruitsFolder:GetChildren()) do
+                                        if not autoHarvestEnabled then break end
+                                        
+                                        local ownerId = fruitModel:GetAttribute("UserId")
+                                        local plantName = fruitModel:GetAttribute("CorePartName")
+                                        local plantID = fruitModel:GetAttribute("PlantId")
+                                        local fruitID = fruitModel:GetAttribute("FruitId")
+                                        
+                                        if ownerId == LocalPlayer.UserId and table.find(selectedHarvestPlants, plantName) then
+                                            if plantID and fruitID then
+                                                harvestPlantPacket(plantName, plantID, fruitID)
+                                                task.wait(0.05)
+                                            end
+                                        end
+                                    end
+                                
+                                -- 2. SINGLE-HARVEST LOGIC (Walang Fruits folder, gumagamit ng SeedName at PlantGrowthReady)
+                                else
+                                    local ownerId = plantModel:GetAttribute("UserId")
+                                    local plantName = plantModel:GetAttribute("SeedName") 
+                                    local plantID = plantModel:GetAttribute("PlantId")
+                                    local isReady = plantModel:GetAttribute("PlantGrowthReady") 
+                                    
+                                    if ownerId == LocalPlayer.UserId and isReady == true and table.find(selectedHarvestPlants, plantName) then
+                                        if plantID then
+                                            harvestPlantPacket(plantName, plantID, nil)
+                                            task.wait(0.05)
+                                        end
+                                    end
+                                end
+                                
+                            end
+                        end
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+--shop
+local CenteredSection = Shop:Section({
+    Title = "Auto buy Seeds",
+    TextXAlignment = "Center",
+    TextSize = 17
+})
+local selectedPlants = {}
+
+Shop:Dropdown({
+    Title = "Select Seeds to Buy",
+    Desc = "Choose which seeds to auto buy",
+    Values = {
+        "Carrot", "Strawberry", "Blueberry", "Tulip", "Tomato", "Apple", 
+        "Bamboo", "Corn", "Cactus", "Pineapple", "Mushroom", "Green Bean", 
+        "Banana", "Grape", "Coconut", "Mango", "Dragon Fruit", "Acorn", 
+        "cherry Sunflower", "Venus Fly Trap", "Pomegranate", "Poison Apple", 
+        "Moon Bloom", "Dragon's Breath"
+    },
+    Multi = true,
+    AllowNone = true,
+    Callback = function(selected)
+        selectedPlants = selected -- Ina-update natin ang listahan tuwing may binabago ka
+    end
+})
+
+-- Remote path para hindi paulit-ulit sa loop
+local remoteEvent = game:GetService("ReplicatedStorage")
+    :WaitForChild("SharedModules")
+    :WaitForChild("Packet")
+    :WaitForChild("RemoteEvent")
+
+local autoBuyEnabled = false
+
+local Toggle = Shop:Toggle({
+    Title = "Auto Buy Seed",
+    Callback = function(state)
+        autoBuyEnabled = state
+        
+        if autoBuyEnabled then
+            -- Gumawa ng panibagong thread para hindi mag-freeze ang buong UI mo
+            task.spawn(function()
+                while autoBuyEnabled do
+                    -- Iikutin nito lahat ng halaman na nilagyan mo ng check sa dropdown
+                    for _, plantName in pairs(selectedPlants) do
+                        -- Siguraduhin na hindi biglang pinatay ang toggle habang nasa loop
+                        if not autoBuyEnabled then break end
+                        
+                        -- Ang gumagana mong buffer technique!
+                        local rawString = "g\000" .. string.char(#plantName) .. plantName 
+                        local myBuffer = buffer.fromstring(rawString)
+                        
+                        -- I-fire ang server para bumili
+                        remoteEvent:FireServer(myBuffer)
+                        
+                        -- Konting delay (0.1 seconds) kada halaman para hindi ka ma-kick o ma-rate limit ng anti-cheat
+                        task.wait(0.1) 
+                    end
+                    -- Delay bago mag-loop ulit sa umpisa ng listahan (bago bumili uli)
+                    task.wait(0.5) 
+                end
+            end)
+        end
+    end
+})
+--gear
+local CenteredSection = Shop:Section({
+    Title = "Auto buy Gears",
+    TextXAlignment = "Center",
+    TextSize = 17
+})
+
+local allGearsList = {
+    "Common Watering Can", "Common Sprinkler", "Sign", "Uncommon Sprinkler", 
+    "Trowel", "Rare Sprinkler", "Jump Mushroom", "Speed Mushroom", "Lantern", 
+    "Shrink Mushroom", "Supersize Mushroom", "Gnome", "Flashbang", "Basic Pot", 
+    "Legendary Sprinkler", "Invisible Mushroom", "Teleporter", "WheelBarrow", 
+    "Super Watering Can", "Super Sprinkler"
+}
+
+local selectedGears = {}
+local autoBuyGearsEnabled = false
+
+Shop:Dropdown({
+    Title = "Select Gears to Buy",
+    Desc = "Choose which gears to auto buy",
+    Values = allGearsList,
+    Multi = true,
+    Default = {},
+    AllowNone = true,
+    Callback = function(selected)
+        selectedGears = selected or {}
+    end
+})
+
+Shop:Toggle({
+    Title = "Auto Buy Gears",
+    Callback = function(state)
+        autoBuyGearsEnabled = state
+        if autoBuyGearsEnabled then
+            task.spawn(function()
+                while autoBuyGearsEnabled do
+                    for _, gearName in pairs(selectedGears) do
+                        if not autoBuyGearsEnabled then break end
+                        
+                        -- Dynamic string builder para sa tamang byte size ng gear name (\019, etc.)
+                        local rawString = "k\000" .. string.char(#gearName) .. gearName
+                        local myBuffer = buffer.fromstring(rawString)
+                        
+                        remoteEvent:FireServer(myBuffer)
+                        task.wait(0.1) -- 0.1s delay kada bili para iwas rate-limit o kick
+                    end
+                    task.wait(0.5) -- Delay bago mag-loop ulit sa umpisa ng listahan
+                end
+            end)
+        end
+    end
+})
+--sell
+local CenteredSection = Sell:Section({
+    Title = "Auto Sell",
+    TextXAlignment = "Center",
+    TextSize = 17
+})
+
+local remoteEvent = game:GetService("ReplicatedStorage")
+    :WaitForChild("SharedModules")
+    :WaitForChild("Packet")
+    :WaitForChild("RemoteEvent")
+
+-- State ng Auto Sell
+local autoSellEnabled = false
+
+local Toggle = Sell:Toggle({
+    Title = "Auto Sell All",
+    Callback = function(state)
+        autoSellEnabled = state
+        
+        if autoSellEnabled then
+            task.spawn(function()
+                while autoSellEnabled do
+                    -- Ang malinis na buffer code mo para sa sell packet
+                    local myBuffer = buffer.fromstring("\153\000#")
+                    
+                    -- I-fire ang server para magbenta
+                    remoteEvent:FireServer(myBuffer)
+                    
+                    -- Delay bago magbenta ulit (gawin nating 1 second para safe at hindi mag-lag)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+--report bugs
+local CenteredSection = Report:Section({
+    Title = "Report Bugs",
+    TextXAlignment = "Center",
+    TextSize = 17
+})
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local JobId = game.JobId
+local PlaceId = game.PlaceId
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerName = LocalPlayer and LocalPlayer.Name or "Unknown Player"
+
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1414334688117522463/XDC1GAn1aafkxRcgIM8lSW7dBwhum0uQFl31iX4OD7UgErYsw-vjziBH3NBECnywePxZ"
+local COOLDOWN_TIME = 30
+local cooldown = false
+
+-- GAME NAME
+local GameName = "Unknown Game"
+pcall(function()
+	GameName = MarketplaceService:GetProductInfo(PlaceId).Name
+end)
+
+-- store input values
+local reportTitle = ""
+local reportDesc = ""
+
+-- Inputs inside Report tab
+local TitleInput = Report:Input({
+    Title = "Title",
+    Desc = "Report Title",
+    Type = "Input",
+    Placeholder = "Enter title...",
+    Callback = function(val)
+        reportTitle = tostring(val or "")
+    end
+})
+
+local DescInput = Report:Input({
+    Title = "Description",
+    Desc = "Report Description",
+    Type = "Textarea",
+    Placeholder = "Enter description...",
+    Callback = function(val)
+        reportDesc = tostring(val or "")
+    end
+})
+
+-- Executor-compatible request
+local requestFunc = request or http_request or syn and syn.request
+
+local function SendToDiscord(message)
+    if not requestFunc then
+        WindUI:Notify({ Title = "Error", Content = "No HTTP request function available.", Duration = 3 })
+        return false
+    end
+
+    local ok, res = pcall(function()
+        return requestFunc({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({ content = message })
+        })
+    end)
+
+    if not ok then return false end
+
+    if type(res) == "table" and res.StatusCode == 429 then
+        WindUI:Notify({ Title = "Rate Limited", Content = "Discord rate limited.", Duration = 4 })
+        return false
+    end
+
+    return true
+end
+
+-- Submit button
+local SubmitBtn = Report:Button({
+    Title = "Submit",
+    Desc = "Send your report",
+    Locked = false,
+
+    Callback = function(self)
+        if cooldown then
+            WindUI:Notify({ Title = "Wait", Content = "Cooldown!", Duration = 3 })
+            return
+        end
+
+        if reportTitle == "" or reportDesc == "" then
+            WindUI:Notify({ Title = "Error", Content = "Fill in both title and description!", Duration = 3 })
+            return
+        end
+
+        -- JOIN LINK
+        local joinLink =
+            "https://www.roblox.com/games/start?placeId=" ..
+            PlaceId ..
+            "&gameInstanceId=" ..
+            JobId
+
+        -- Format message: Description is now in code block, and JobId was removed.
+        local message =
+            "**Game:** " .. GameName ..
+            "\n**Player:** " .. PlayerName ..
+            "\n**Title:** " .. reportTitle .. "\n" ..
+            "\n**Description:**\n```\n" .. reportDesc .. "\n```" ..
+            "\n\n**Join Server:** " .. joinLink
+
+        local sent = SendToDiscord(message)
+
+        if sent then
+            WindUI:Notify({ Title = "Report Sent", Content = "Successfully sent!", Duration = 3 })
+
+            -- clear inputs
+            reportTitle = ""
+            reportDesc = ""
+            TitleInput:Set("")
+            DescInput:Set("")
+
+            -- cooldown
+            cooldown = true
+            self.Locked = true
+
+            task.spawn(function()
+                for i = COOLDOWN_TIME, 1, -1 do
+                    SubmitBtn:SetText("Cooldown: " .. i .. "s")
+                    task.wait(1)
+                end
+                SubmitBtn:SetText("Submit")
+                self.Locked = false
+                cooldown = false
+            end)
+        else
+            WindUI:Notify({ Title = "Error", Content = "Failed to send report.", Duration = 3 })
+        end
+    end
+})
